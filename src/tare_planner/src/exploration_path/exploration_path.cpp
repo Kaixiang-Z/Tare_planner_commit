@@ -52,6 +52,7 @@ void ExplorationPath::Append(const ExplorationPath &path) {
 }
 
 void ExplorationPath::Reverse() {
+    // 节点反序
     std::reverse(nodes_.begin(), nodes_.end());
 }
 
