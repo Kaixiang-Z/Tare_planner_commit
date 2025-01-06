@@ -57,6 +57,7 @@ void ExplorationPath::Reverse() {
 
 nav_msgs::Path ExplorationPath::GetPath() const {
     nav_msgs::Path path;
+    // 通过node获取path
     for (int i = 0; i < nodes_.size(); i++) {
         geometry_msgs::PoseStamped pose;
         pose.pose.position.x = nodes_[i].position_.x();
@@ -69,6 +70,7 @@ nav_msgs::Path ExplorationPath::GetPath() const {
 }
 void ExplorationPath::FromPath(const nav_msgs::Path &path) {
     nodes_.clear();
+    // 通过path获取节点
     for (int i = 0; i < path.poses.size(); i++) {
         exploration_path_ns::Node node;
         node.position_.x() = path.poses[i].pose.position.x;
@@ -81,6 +83,7 @@ void ExplorationPath::FromPath(const nav_msgs::Path &path) {
 
 void ExplorationPath::GetVisualizationCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr vis_cloud) const {
     vis_cloud->clear();
+    // 把所有节点的位置传入点云
     for (int i = 0; i < nodes_.size(); i++) {
         pcl::PointXYZI point;
         point.x = nodes_[i].position_.x();
@@ -93,6 +96,7 @@ void ExplorationPath::GetVisualizationCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr
 
 void ExplorationPath::GetKeyPointCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr vis_cloud) const {
     vis_cloud->clear();
+    // 把所有局部以及全局视点 （关键点） 的位置传入 vis_cloud 中
     for (int i = 0; i < nodes_.size(); i++) {
         if (nodes_[i].type_ == exploration_path_ns::NodeType::ROBOT
             || nodes_[i].type_ == exploration_path_ns::NodeType::LOOKAHEAD_POINT

@@ -9,7 +9,7 @@
                 "/opt/ros/noetic/include/**"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/clang",
+            "compilerPath": "/usr/bin/gcc",
             "cppStandard": "c++14",
             "intelliSenseMode": "clang-x64"
         }
