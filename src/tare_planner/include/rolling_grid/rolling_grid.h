@@ -68,6 +68,7 @@ private:
     bool which_grid_;
 
     inline int GetFromIdx(int cur_idx, int roll_step, int max_idx) const {
+        //循环更新索引
         return cur_idx <= roll_step - 1 ? max_idx - roll_step + cur_idx : cur_idx - roll_step;
     }
     void RollHelper(const std::unique_ptr<grid_ns::Grid<int>> &grid_in,

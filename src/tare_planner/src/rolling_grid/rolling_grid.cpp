@@ -13,6 +13,7 @@
 
 namespace rolling_grid_ns {
 RollingGrid::RollingGrid(const Eigen::Vector3i &size) : size_(size), which_grid_(true) {
+    // 雷达坐标系和机器人本体坐标系不一致，基于雷达坐标系的grid需要翻转
     array_ind_to_ind_.resize(size_.x() * size_.y() * size_.z());
     grid0_ = std::make_unique<grid_ns::Grid<int>>(size_, 0);
     grid1_ = std::make_unique<grid_ns::Grid<int>>(size_, 0);
@@ -30,10 +31,13 @@ RollingGrid::RollingGrid(const Eigen::Vector3i &size) : size_(size), which_grid_
 }
 
 void RollingGrid::Roll(const Eigen::Vector3i &roll_dir) {
+    // 翻转方向全部为0， 不做操作
     if (roll_dir.x() == 0 && roll_dir.y() == 0 && roll_dir.z() == 0) { return; }
     if (which_grid_) {
+        // grid1 to grid0
         RollHelper(grid1_, grid0_, roll_dir);
     } else {
+        // grid0 to grid1
         RollHelper(grid0_, grid1_, roll_dir);
     }
     GetRolledInIndices(roll_dir);
@@ -45,8 +49,10 @@ void RollingGrid::Roll(const Eigen::Vector3i &roll_dir) {
     for (int ind = 0; ind < cell_num; ind++) {
         int array_ind;
         if (which_grid_) {
+            // 之前是从grid0 到 grid1， 就取grid1的
             array_ind = grid1_->GetCellValue(ind);
         } else {
+            // 之前是从grid1 到 grid0， 就取grid0的
             array_ind = grid0_->GetCellValue(ind);
         }
         array_ind_to_ind_[array_ind] = ind;
@@ -55,25 +61,31 @@ void RollingGrid::Roll(const Eigen::Vector3i &roll_dir) {
 
 void RollingGrid::RollHelper(const std::unique_ptr<grid_ns::Grid<int>> &grid_in,
                              const std::unique_ptr<grid_ns::Grid<int>> &grid_out, Eigen::Vector3i roll_dir) {
+    // 两个grid尺寸不一致会报错
     Eigen::Vector3i grid_in_size = grid_in->GetSize();
     Eigen::Vector3i grid_out_size = grid_out->GetSize();
     MY_ASSERT(grid_in_size.x() == grid_out_size.x() && grid_in_size.x() == size_.x());
     MY_ASSERT(grid_in_size.y() == grid_out_size.y() && grid_in_size.y() == size_.y());
     MY_ASSERT(grid_in_size.z() == grid_out_size.z() && grid_in_size.z() == size_.z());
+    // 取模
     roll_dir.x() %= size_.x();
     roll_dir.y() %= size_.y();
     roll_dir.z() %= size_.z();
     Eigen::Vector3i dir;
+    // 确保方向都是正的
     dir.x() = roll_dir.x() >= 0 ? roll_dir.x() : size_.x() + roll_dir.x();
     dir.y() = roll_dir.y() >= 0 ? roll_dir.y() : size_.y() + roll_dir.y();
     dir.z() = roll_dir.z() >= 0 ? roll_dir.z() : size_.z() + roll_dir.z();
 
     int cell_num = size_.x() * size_.y() * size_.z();
     for (int ind = 0; ind < cell_num; ind++) {
+        // 根据索引所取sub子空间
         Eigen::Vector3i sub = grid_out->Ind2Sub(ind);
+        // 更新索引（环形缓冲区）
         int from_x = GetFromIdx(sub.x(), dir.x(), size_.x());
         int from_y = GetFromIdx(sub.y(), dir.y(), size_.y());
         int from_z = GetFromIdx(sub.z(), dir.z(), size_.z());
+        // 新的grid对应index的cell 即为原grid更新索引后的cell
         grid_out->GetCell(ind) = grid_in->GetCellValue(from_x, from_y, from_z);
     }
 }
@@ -94,10 +106,12 @@ void RollingGrid::GetRolledInIndices(const Eigen::Vector3i &roll_dir) {
     dir.z() = roll_dir.z() >= 0 ? roll_dir.z() : size_.z() + roll_dir.z();
 
     updated_indices_.clear();
+    // 先更新x
     if (dir.x() > 0) {
         GetIndices(updated_indices_, Eigen::Vector3i(start_idx.x(), 0, 0),
                    Eigen::Vector3i(end_idx.x(), size_.y() - 1, size_.z() - 1));
     }
+    // 再更新y
     if (dir.y() > 0) {
         int x_start = 0;
         int x_end = size_.x() - 1;
@@ -111,6 +125,7 @@ void RollingGrid::GetRolledInIndices(const Eigen::Vector3i &roll_dir) {
         GetIndices(updated_indices_, Eigen::Vector3i(x_start, start_idx.y(), 0),
                    Eigen::Vector3i(x_end, end_idx.y(), size_.z() - 1));
     }
+    // 最后更新z
     if (dir.z() > 0) {
         int x_start = 0;
         int x_end = size_.x() - 1;
@@ -192,6 +207,7 @@ void RollingGrid::GetRolledOutIndices(const Eigen::Vector3i &roll_dir, std::vect
 }
 
 void RollingGrid::GetIndices(std::vector<int> &indices, Eigen::Vector3i start_idx, Eigen::Vector3i end_idx) const {
+    // 获取 grid0 从 start 到 end 的sub子空间的索引
     start_idx.x() %= size_.x();
     start_idx.y() %= size_.y();
     start_idx.z() %= size_.z();
@@ -216,12 +232,14 @@ void RollingGrid::GetIndices(std::vector<int> &indices, Eigen::Vector3i start_id
 }
 
 void RollingGrid::GetUpdatedIndices(std::vector<int> &updated_indices) const {
+    // 获取更新之后的索引
     updated_indices.clear();
     updated_indices.resize(updated_indices_.size());
     std::copy(updated_indices_.begin(), updated_indices_.end(), updated_indices.begin());
 }
 
 void RollingGrid::GetUpdatedArrayIndices(std::vector<int> &updated_array_indices) const {
+    // 获取更新后sub子空间的索引
     updated_array_indices.clear();
     for (const auto &ind : updated_indices_) {
         Eigen::Vector3i sub = grid0_->Ind2Sub(ind);

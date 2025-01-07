@@ -74,6 +74,7 @@ void TAREVisualizer::InitializeMarkers() {
 }
 
 void TAREVisualizer::GetLocalPlanningHorizonMarker(double x, double y, double z) {
+    // 局部规划空间 绿色空心立方体
     local_planning_horizon_origin_.x = x;
     local_planning_horizon_origin_.y = y;
     local_planning_horizon_origin_.z = z - kLocalPlanningHorizonSizeZ / 2;
@@ -150,6 +151,7 @@ void TAREVisualizer::GetLocalPlanningHorizonMarker(double x, double y, double z)
 
 void TAREVisualizer::GetGlobalSubspaceMarker(const std::unique_ptr<grid_world_ns::GridWorld> &grid_world,
                                              const std::vector<int> &ordered_cell_indices) {
+    // 全局子空间 绿色方块
     global_subspaces_marker_->marker_.points.clear();
     global_subspaces_marker_->marker_.colors.clear();
     int cell_num = ordered_cell_indices.size();
