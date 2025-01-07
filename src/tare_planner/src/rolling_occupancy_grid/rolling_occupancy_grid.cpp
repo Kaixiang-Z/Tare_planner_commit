@@ -56,17 +56,18 @@ bool RollingOccupancyGrid::UpdateRobotPosition(const Eigen::Vector3d &robot_posi
     Eigen::Vector3i robot_grid_sub;
     Eigen::Vector3d diff = robot_position_ - origin_;
     Eigen::Vector3i sub = Eigen::Vector3i::Zero();
+    // 更新机器人所在的sub子空间位置
     for (int i = 0; i < dimension_; i++) {
         robot_grid_sub(i) = diff(i) > 0 ? static_cast<int>(diff(i) / (rollover_step_size_(i) * resolution_(i))) : -1;
     }
-
+    // grid size / 滚动步长 / 2 子空间中心的位置， 计算相对于中心的偏移量
     Eigen::Vector3i sub_diff = Eigen::Vector3i::Zero();
     for (int i = 0; i < dimension_; i++) {
         sub_diff(i) = (grid_size_(i) / rollover_step_size_(i)) / 2 - robot_grid_sub(i);
     }
 
     if (sub_diff.x() == 0 && sub_diff.y() == 0 && sub_diff.z() == 0) { return false; }
-
+    // 计算每个维度滚动的步长
     Eigen::Vector3i rollover_step(0, 0, 0);
     for (int i = 0; i < dimension_; i++) {
         rollover_step(i) = std::abs(sub_diff(i)) > 0 ?
@@ -227,6 +228,7 @@ void RollingOccupancyGrid::RayTraceHelper(const Eigen::Vector3i &start_sub, cons
 void RollingOccupancyGrid::GetFrontier(pcl::PointCloud<pcl::PointXYZI>::Ptr &frontier_cloud,
                                        const Eigen::Vector3d &origin, const Eigen::Vector3d &range) {
     if (!initialized_) { return; }
+    // 获取边界
     frontier_cloud->points.clear();
     Eigen::Vector3i sub_max = occupancy_array_->Pos2Sub(origin + range);
     Eigen::Vector3i sub_min = occupancy_array_->Pos2Sub(origin - range);
@@ -239,15 +241,18 @@ void RollingOccupancyGrid::GetFrontier(pcl::PointCloud<pcl::PointXYZI>::Ptr &fro
     int ray_trace_count = 0;
 
     int cell_num = occupancy_array_->GetCellNumber();
+    // 检测每一个cell的状态
     for (int ind = 0; ind < cell_num; ind++) {
         Eigen::Vector3i cur_sub = occupancy_array_->Ind2Sub(ind);
         if (!occupancy_array_->InRange(cur_sub)) { continue; }
         if (!InRange(cur_sub, sub_min, sub_max)) { continue; }
         int array_ind = rolling_grid_->GetArrayInd(cur_sub);
+        // 如果检测到了一个未知子空间
         if (occupancy_array_->GetCellValue(array_ind) == UNKNOWN) {
             bool z_free = false;
             bool xy_free = false;
             // If the unknown cell has neighboring free cells in xy but not z direction
+            // 先看z轴方向上的上下两个子空间，如果状态是free，就把z_free设置为true并continue掉？
             cur_sub(2)--;
             if (occupancy_array_->InRange(cur_sub)) {
                 array_ind = rolling_grid_->GetArrayInd(cur_sub);
@@ -265,7 +270,7 @@ void RollingOccupancyGrid::GetFrontier(pcl::PointCloud<pcl::PointXYZI>::Ptr &fro
                 }
             }
             cur_sub(2)--;
-
+            // 检测xy方向，如果有自由子空间就退出检测
             for (int i = 0; i < 2; i++) {
                 cur_sub(i)--;
                 if (occupancy_array_->InRange(cur_sub)) {
@@ -287,6 +292,7 @@ void RollingOccupancyGrid::GetFrontier(pcl::PointCloud<pcl::PointXYZI>::Ptr &fro
                 }
                 cur_sub(i)--;
             }
+            // xy方向存在自由子空间，并且z方向没有，该子空间为未知子空间，把该子空间的位置存入frontier_cloud表示边界
             if (xy_free && !z_free) {
                 Eigen::Vector3d position = occupancy_array_->Sub2Pos(cur_sub);
                 pcl::PointXYZI point;
@@ -302,6 +308,7 @@ void RollingOccupancyGrid::GetFrontier(pcl::PointCloud<pcl::PointXYZI>::Ptr &fro
 
 void RollingOccupancyGrid::GetVisualizationCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr &vis_cloud) {
     vis_cloud->clear();
+    // 根据点云强度表示自由和被占据子空间的位置
     int cell_number = occupancy_array_->GetCellNumber();
     for (int i = 0; i < cell_number; i++) {
         int array_ind = rolling_grid_->GetArrayInd(i);
