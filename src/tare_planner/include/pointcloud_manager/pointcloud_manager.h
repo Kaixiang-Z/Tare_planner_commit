@@ -39,6 +39,7 @@ public:
     bool UpdateRobotPosition(const geometry_msgs::Point &robot_position);
     template <class InputPCLPointType>
     void UpdatePointCloud(const pcl::PointCloud<InputPCLPointType> &cloud_in) {
+        // 更新范围内的子空间内的点云，并对每个cell内的点云进行下采样
         for (const auto &cloud_in_point : cloud_in.points) {
             PCLPointType point;
             point.x = cloud_in_point.x;
@@ -49,7 +50,7 @@ public:
             int ind = pointcloud_grid_->Sub2Ind(cell_sub);
             pointcloud_grid_->GetCell(ind)->points.push_back(point);
         }
-
+        // 下采样
         for (int i = 0; i < pointcloud_grid_->GetCellNumber(); ++i) {
             if (pointcloud_grid_->GetCell(i)->points.empty()) continue;
             cloud_dwz_filter_.setInputCloud(pointcloud_grid_->GetCell(i));

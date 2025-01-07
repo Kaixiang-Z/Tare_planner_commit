@@ -110,6 +110,7 @@ bool PointCloudManager::UpdateRobotPosition(const geometry_msgs::Point &robot_po
 
 void PointCloudManager::GetPointCloud(PCLCloudType &cloud_out) {
     cloud_out.clear();
+    // 获取邻居子空间的点云
     for (const auto &neighbor_ind : neighbor_indices_) { cloud_out += *(pointcloud_grid_->GetCell(neighbor_ind)); }
 }
 
