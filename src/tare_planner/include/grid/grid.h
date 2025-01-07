@@ -23,14 +23,18 @@ public:
         // MY_ASSERT(size.x() > 0);
         // MY_ASSERT(size.y() > 0);
         // MY_ASSERT(size.z() > 0);
+        // 构造函数， 传入size， 初始值， 原点， 分辨率（默认1m），维度（默认3维xyz）
 
         origin_ = origin;
         size_ = size;
         resolution_ = resolution;
         dimension_ = dimension;
 
+        // 设置每个维度分辨率的逆
         for (int i = 0; i < dimension_; i++) { resolution_inv_(i) = 1.0 / resolution_(i); }
+        // 每个grid里有若干个cell， 同sub子空间对应
         cell_number_ = size_.x() * size_.y() * size_.z();
+        // 每个cell设置初始值， 根据索引对应的子空间更新subs
         for (int i = 0; i < cell_number_; i++) {
             cells_.push_back(init_value);
             subs_.push_back(ind2sub_(i));
@@ -74,20 +78,24 @@ public:
 
     bool InRange(const Eigen::Vector3i &sub) const {
         bool in_range = true;
+        // 检测该子空间是否在size内
         for (int i = 0; i < dimension_; i++) { in_range &= sub(i) >= 0 && sub(i) < size_(i); }
         return in_range;
     }
 
     bool InRange(int ind) const {
+        // 重载，根据索引确定的， cell_number = size_.x() * size_.y() * size_.z()
         return ind >= 0 && ind < cell_number_;
     }
 
     Eigen::Vector3i Ind2Sub(int ind) const {
         // MY_ASSERT(InRange(ind));
+        // 根据索引从subs获取对应的sub子空间
         return subs_[ind];
     }
 
     int Sub2Ind(int x, int y, int z) const {
+        // 子空间的xyz获取对应的index
         return x + (y * size_.x()) + (z * size_.x() * size_.y());
     }
 
@@ -101,6 +109,8 @@ public:
     }
 
     Eigen::Vector3d Sub2Pos(const Eigen::Vector3i &sub) const {
+        // 获取子空间中心坐标
+        // 坐标计算方法： 原点 + 子空间位置 * 分辨率 + 分辨率 / 2 （确保位于中心）
         Eigen::Vector3d pos(0, 0, 0);
         for (int i = 0; i < dimension_; i++) { pos(i) = origin_(i) + sub(i) * resolution_(i) + resolution_(i) / 2; }
         return pos;
@@ -117,6 +127,8 @@ public:
 
     Eigen::Vector3i Pos2Sub(const Eigen::Vector3d &pos) const {
         Eigen::Vector3i sub(0, 0, 0);
+        // 根据坐标获取子空间位置 （原点默认位于左下角）
+        // 计算方法： 坐标差值 * 分辨率的逆
         for (int i = 0; i < dimension_; i++) {
             sub(i) = pos(i) - origin_(i) > 0 ? static_cast<int>((pos(i) - origin_(i)) * resolution_inv_(i)) : -1;
         }
@@ -184,6 +196,7 @@ private:
 
     Eigen::Vector3i ind2sub_(int ind) const {
         // MY_ASSERT(InRange(ind));
+        // 根据index获取对应的子空间（x,y,z）
         Eigen::Vector3i sub;
         sub.z() = ind / (size_.x() * size_.y());
         ind -= (sub.z() * size_.x() * size_.y());
