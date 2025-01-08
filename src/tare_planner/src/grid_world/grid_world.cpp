@@ -169,7 +169,7 @@ void GridWorld::UpdateNeighborCells(const geometry_msgs::Point &robot_position) 
     int N = KNearbyGridNum / 2;
     int M = 1;
     GetNeighborCellIndices(robot_position, Eigen::Vector3i(N, N, M), neighbor_cell_indices_);
-
+    // 对每一个neighbor cell，如果上一帧不存在该index， 增加一次count
     for (const auto &cell_ind : neighbor_cell_indices_) {
         if (std::find(prev_neighbor_cell_indices.begin(), prev_neighbor_cell_indices.end(), cell_ind)
             == prev_neighbor_cell_indices.end()) {
@@ -196,6 +196,7 @@ void GridWorld::UpdateCellKeyposeGraphNodes(const std::unique_ptr<keypose_graph_
             subspaces_->GetCell(i).ClearGraphNodeIndices();
         }
     }
+    // 更新关键帧
     for (const auto &node_ind : keypose_graph_connected_node_indices) {
         geometry_msgs::Point node_position = keypose_graph->GetNodePosition(node_ind);
         int cell_ind = GetCellInd(node_position.x, node_position.y, node_position.z);

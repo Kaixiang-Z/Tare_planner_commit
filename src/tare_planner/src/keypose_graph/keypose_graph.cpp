@@ -277,6 +277,7 @@ void KeyposeGraph::CheckLocalCollision(
             && std::abs(viewpoint_manager->GetViewPointHeight(viewpoint_ind) - node_position.z()) < max_z_diff) {
             in_local_planning_horizon_count++;
             in_viewpoint_range_count++;
+            // 如果该视点存在碰撞冲突，移除邻居节点同该节点的所有边
             if (viewpoint_manager->ViewPointInCollision(viewpoint_ind)) {
                 node_in_collision = true;
                 collision_node_count++;
@@ -293,7 +294,9 @@ void KeyposeGraph::CheckLocalCollision(
                 }
                 graph_[i].clear();
                 dist_[i].clear();
-            } else {
+            }
+            // 否则对边进行检查，只移除存在碰撞冲突的边
+            else {
                 Eigen::Vector3d viewpoint_resolution = viewpoint_manager->GetResolution();
                 double collision_check_resolution = std::min(viewpoint_resolution.x(), viewpoint_resolution.y()) / 2;
                 // Check edge collision
@@ -400,13 +403,16 @@ void KeyposeGraph::CheckConnectivity(const geometry_msgs::Point &robot_position)
 }
 
 int KeyposeGraph::AddKeyposeNode(const nav_msgs::Odometry &keypose, const planning_env_ns::PlanningEnv &planning_env) {
+    // 增加关键帧节点
     current_keypose_position_ = keypose.pose.pose.position;
     current_keypose_id_ = static_cast<int>(keypose.pose.covariance[0]);
     int new_node_ind = nodes_.size();
+    // 统计已有关键帧数量
     int keypose_node_count = 0;
     for (int i = 0; i < nodes_.size(); i++) {
         if (nodes_[i].is_keypose_) { keypose_node_count++; }
     }
+    // 如果还没有节点或关键帧节点，直接把当前位置作为关键帧输入
     if (nodes_.empty() || keypose_node_count == 0) {
         AddNode(current_keypose_position_, new_node_ind, current_keypose_id_, true);
         return new_node_ind;
@@ -424,18 +430,21 @@ int KeyposeGraph::AddKeyposeNode(const nav_msgs::Odometry &keypose, const planni
                     continue;
                 }
             }
+            // 获取离当前位置最近的历史关键帧的距离以及索引
             double dist = misc_utils_ns::PointXYZDist<geometry_msgs::Point, geometry_msgs::Point>(
                 nodes_[i].position_, current_keypose_position_);
             if (dist < min_dist && nodes_[i].is_keypose_) {
                 min_dist = dist;
                 min_dist_ind = i;
             }
+            // 记录时间上最近一帧的关键帧距离以及id
             int keypose_id = nodes_[i].keypose_id_;
             if (keypose_id > max_keypose_id && nodes_[i].is_keypose_) {
                 last_keypose_dist = dist;
                 last_keypose_ind = i;
                 max_keypose_id = keypose_id;
             }
+            // 距离小于阈值则将该节点索引以及阈值保存下来
             if (dist < kAddEdgeConnectDistThr) {
                 in_range_node_indices.push_back(i);
                 in_range_node_dist.push_back(dist);
@@ -443,14 +452,18 @@ int KeyposeGraph::AddKeyposeNode(const nav_msgs::Odometry &keypose, const planni
         }
         // If the closest keypose node is some distance away
         if (min_dist_ind >= 0 && min_dist_ind < nodes_.size()) {
+            // 最近距离大于增加节点的最小距离
             if (min_dist > kAddNodeMinDist) {
                 // If the last keypose is within range
+                // 和上一关键帧关联
                 if (last_keypose_dist < kAddEdgeToLastKeyposeDistThr && last_keypose_ind >= 0
                     && last_keypose_ind < nodes_.size()) {
                     // Add edge to the last keypose node
                     AddNodeAndEdge(current_keypose_position_, new_node_ind, current_keypose_id_, true, last_keypose_ind,
                                    last_keypose_dist);
-                } else {
+                }
+                // 和最近关键帧关联
+                else {
                     // Add edge to the nearest node
                     AddNodeAndEdge(current_keypose_position_, new_node_ind, current_keypose_id_, true, min_dist_ind,
                                    min_dist);
