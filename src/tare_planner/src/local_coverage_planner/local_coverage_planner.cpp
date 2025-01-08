@@ -28,15 +28,21 @@ LocalCoveragePlanner::LocalCoveragePlanner(ros::NodeHandle &nh) :
 }
 
 int LocalCoveragePlanner::GetBoundaryViewpointIndex(const exploration_path_ns::ExplorationPath &global_path) {
+    // 获取位于边界的视点索引
+    // 当前机器人所在的视点索引
     int boundary_viewpoint_index = robot_viewpoint_ind_;
+    // 存在一条全局的路径
     if (!global_path.nodes_.empty()) {
+        // 路径的起点所在视点满足限制条件
         if (viewpoint_manager_->InLocalPlanningHorizon(global_path.nodes_.front().position_)) {
             for (int i = 0; i < global_path.nodes_.size(); i++) {
+                // 碰到全局视点/原点/不满足条件直接退出
                 if (global_path.nodes_[i].type_ == exploration_path_ns::NodeType::GLOBAL_VIEWPOINT
                     || global_path.nodes_[i].type_ == exploration_path_ns::NodeType::HOME
                     || !viewpoint_manager_->InLocalPlanningHorizon(global_path.nodes_[i].position_)) {
                     break;
                 }
+                // 获取当前节点所在位置最近的视点
                 boundary_viewpoint_index =
                     viewpoint_manager_->GetNearestCandidateViewPointInd(global_path.nodes_[i].position_);
             }
@@ -46,8 +52,10 @@ int LocalCoveragePlanner::GetBoundaryViewpointIndex(const exploration_path_ns::E
 }
 
 void LocalCoveragePlanner::GetBoundaryViewpointIndices(exploration_path_ns::ExplorationPath global_path) {
+    // 开头选一个
     start_viewpoint_ind_ = GetBoundaryViewpointIndex(global_path);
     global_path.Reverse();
+    // 反序后尾部选一个
     end_viewpoint_ind_ = GetBoundaryViewpointIndex(global_path);
 }
 
@@ -55,6 +63,7 @@ void LocalCoveragePlanner::GetNavigationViewPointIndices(exploration_path_ns::Ex
                                                          std::vector<int> &navigation_viewpoint_indices) {
     // Get start and end point
     robot_viewpoint_ind_ = viewpoint_manager_->GetNearestCandidateViewPointInd(robot_position_);
+    // 局部路径的终点
     lookahead_viewpoint_ind_ = viewpoint_manager_->GetNearestCandidateViewPointInd(lookahead_point_);
     if (!lookahead_point_update_ || !viewpoint_manager_->InRange(lookahead_viewpoint_ind_)) {
         lookahead_viewpoint_ind_ = robot_viewpoint_ind_;
@@ -90,22 +99,31 @@ void LocalCoveragePlanner::EnqueueViewpointCandidates(std::vector<std::pair<int,
                                                       const std::vector<bool> &covered_point_list,
                                                       const std::vector<bool> &covered_frontier_point_list,
                                                       const std::vector<int> &selected_viewpoint_array_indices) {
+    // 遍历所有候选视点
     for (const auto &viewpoint_index : viewpoint_manager_->GetViewPointCandidateIndices()) {
+        // 如果之前已经访问过或者不是要探索的cell就跳过
         if (viewpoint_manager_->ViewPointVisited(viewpoint_index)
             || !viewpoint_manager_->ViewPointInExploringCell(viewpoint_index)) {
             continue;
         }
+        // 获取视点所在索引
         int viewpoint_array_index = viewpoint_manager_->GetViewPointArrayInd(viewpoint_index);
+        // 如果已经在被选择的视点集合中就跳过
         if (std::find(selected_viewpoint_array_indices.begin(), selected_viewpoint_array_indices.end(),
                       viewpoint_array_index)
             != selected_viewpoint_array_indices.end()) {
             continue;
         }
+        // 获取视点能看到的点的数量
         int covered_point_num =
             viewpoint_manager_->GetViewPointCoveredPointNum(covered_point_list, viewpoint_array_index, true);
+        // 大于阈值存入cover_point_queue
         if (covered_point_num >= parameters_.kMinAddPointNum) {
             cover_point_queue.emplace_back(covered_point_num, viewpoint_index);
-        } else if (use_frontier_) {
+        }
+        // 如果利用边界
+        else if (use_frontier_) {
+            // 覆盖的边界上的点的数量
             int covered_frontier_point_num = viewpoint_manager_->GetViewPointCoveredFrontierPointNum(
                 covered_frontier_point_list, viewpoint_array_index, true);
             if (covered_frontier_point_num >= parameters_.kMinAddFrontierPointNum) {
@@ -114,7 +132,7 @@ void LocalCoveragePlanner::EnqueueViewpointCandidates(std::vector<std::pair<int,
         }
     }
 
-    // Sort the queue
+    // Sort the queue， 根据点的数量排序
     std::sort(cover_point_queue.begin(), cover_point_queue.end(), SortPairInRev);
     if (use_frontier_) { std::sort(frontier_queue.begin(), frontier_queue.end(), SortPairInRev); }
 }
@@ -122,17 +140,18 @@ void LocalCoveragePlanner::EnqueueViewpointCandidates(std::vector<std::pair<int,
 void LocalCoveragePlanner::SelectViewPoint(const std::vector<std::pair<int, int>> &queue,
                                            const std::vector<bool> &covered,
                                            std::vector<int> &selected_viewpoint_indices, bool use_frontier) {
+    // 如果排完序后最好的视点都不满足要求（头一个），直接退出不找了
     if (use_frontier) {
         if (queue.empty() || queue[0].first < parameters_.kMinAddFrontierPointNum) { return; }
     } else {
         if (queue.empty() || queue[0].first < parameters_.kMinAddPointNum) { return; }
     }
-
+    // 复制一份
     std::vector<bool> covered_copy;
     for (int i = 0; i < covered.size(); i++) { covered_copy.push_back(covered[i]); }
     std::vector<std::pair<int, int>> queue_copy;
     for (int i = 0; i < queue.size(); i++) { queue_copy.push_back(queue[i]); }
-
+    // 计算有多少个视点满足需求
     int sample_range = 0;
     for (int i = 0; i < queue_copy.size(); i++) {
         if (use_frontier) {
@@ -141,20 +160,21 @@ void LocalCoveragePlanner::SelectViewPoint(const std::vector<std::pair<int, int>
             if (queue_copy[i].first >= parameters_.kMinAddPointNum) { sample_range++; }
         }
     }
-
     sample_range = std::min(parameters_.kGreedyViewPointSampleRange, sample_range);
     std::random_device rd;
     std::mt19937 gen(rd());
+    // 生成指定范围内均匀分布的随机整数
     std::uniform_int_distribution<int> gen_next_queue_idx(0, sample_range - 1);
     int queue_idx = gen_next_queue_idx(gen);
+    // 随机选了一个开始计算
     int cur_ind = queue_copy[queue_idx].second;
 
     while (true) {
         int cur_array_ind = viewpoint_manager_->GetViewPointArrayInd(cur_ind);
+        // 对于每一个覆盖边界的点集， 将covered_copy对应的索引改为true
         if (use_frontier) {
-            for (const auto &point_ind : viewpoint_manager_->GetViewPointCoveredFrontierPointList(cur_array_ind, true))
-
-            {
+            for (const auto &point_ind :
+                 viewpoint_manager_->GetViewPointCoveredFrontierPointList(cur_array_ind, true)) {
                 MY_ASSERT(misc_utils_ns::InRange<bool>(covered_copy, point_ind));
                 if (!covered_copy[point_ind]) { covered_copy[point_ind] = true; }
             }
@@ -164,6 +184,7 @@ void LocalCoveragePlanner::SelectViewPoint(const std::vector<std::pair<int, int>
                 if (!covered_copy[point_ind]) { covered_copy[point_ind] = true; }
             }
         }
+        // 该索引纳入被选择的视点集合，并擦除掉queue_copy内的对应数据
         selected_viewpoint_indices.push_back(cur_ind);
         queue_copy.erase(queue_copy.begin() + queue_idx);
 
@@ -172,6 +193,7 @@ void LocalCoveragePlanner::SelectViewPoint(const std::vector<std::pair<int, int>
             int add_point_num = 0;
             int ind = queue_copy[i].second;
             int array_ind = viewpoint_manager_->GetViewPointArrayInd(ind);
+            // 对每一个视点，计算其覆盖的点的数量
             if (use_frontier) {
                 for (const auto &point_ind :
                      viewpoint_manager_->GetViewPointCoveredFrontierPointList(array_ind, true)) {
@@ -187,7 +209,7 @@ void LocalCoveragePlanner::SelectViewPoint(const std::vector<std::pair<int, int>
 
             queue_copy[i].first = add_point_num;
         }
-
+        // 重新排序，并且检测是否最好的视点仍然满足需求
         std::sort(queue_copy.begin(), queue_copy.end(), SortPairInRev);
 
         if (queue_copy.empty() || queue_copy[0].first < parameters_.kMinAddPointNum) { break; }
@@ -204,6 +226,7 @@ void LocalCoveragePlanner::SelectViewPoint(const std::vector<std::pair<int, int>
                 if (queue[i].first >= parameters_.kMinAddPointNum) { sample_range++; }
             }
         }
+        // 再随机选下一个点
         sample_range = std::min(parameters_.kGreedyViewPointSampleRange, sample_range);
         std::uniform_int_distribution<int> gen_next_queue_idx(0, sample_range - 1);
         queue_idx = gen_next_queue_idx(gen);
@@ -236,7 +259,7 @@ exploration_path_ns::ExplorationPath LocalCoveragePlanner::SolveTSP(const std::v
 {
     // nav_msgs::Path tsp_path;
     exploration_path_ns::ExplorationPath tsp_path;
-
+    // 找不到能用的视点就直接返回
     if (selected_viewpoint_indices.empty()) { return tsp_path; }
 
     // Get start and end index
@@ -258,16 +281,20 @@ exploration_path_ns::ExplorationPath LocalCoveragePlanner::SolveTSP(const std::v
     // Get distance matrix
     int node_size;
     if (has_start_end_dummy && has_robot_lookahead_dummy) {
+        // 首尾 + 中间的点
         node_size = selected_viewpoint_indices.size() + 2;
     } else if (has_start_end_dummy || has_robot_lookahead_dummy) {
+        // 机器人和目标点重合
         node_size = selected_viewpoint_indices.size() + 1;
     } else {
+        // 二者都满足
         node_size = selected_viewpoint_indices.size();
     }
     misc_utils_ns::Timer find_path_timer("find path");
     find_path_timer.Start();
     std::vector<std::vector<int>> distance_matrix(node_size, std::vector<int>(node_size, 0));
     std::vector<int> tmp;
+    // 构建节点间的距离矩阵
     for (int i = 0; i < selected_viewpoint_indices.size(); i++) {
         int from_ind = selected_viewpoint_indices[i];
         // int from_graph_idx = graph_index_map_[from_ind];
@@ -285,7 +312,7 @@ exploration_path_ns::ExplorationPath LocalCoveragePlanner::SolveTSP(const std::v
             distance_matrix[i][j] = static_cast<int>(10 * path_length);
         }
     }
-
+    // 对称矩阵
     for (int i = 0; i < selected_viewpoint_indices.size(); i++) {
         for (int j = i + 1; j < selected_viewpoint_indices.size(); j++) {
             distance_matrix[i][j] = distance_matrix[j][i];
@@ -373,7 +400,7 @@ exploration_path_ns::ExplorationPath LocalCoveragePlanner::SolveTSP(const std::v
         ordered_viewpoint_indices.push_back(selected_viewpoint_indices[path_index[i]]);
     }
 
-    // Add the end node index
+    // Add the end node index 形成环
     if (start_ind == end_ind && !path_index.empty()) { path_index.push_back(path_index[0]); }
 
     tsp_timer.Stop(false);
@@ -477,7 +504,7 @@ LocalCoveragePlanner::SolveLocalCoverageProblem(const exploration_path_ns::Explo
 
     misc_utils_ns::Timer find_path_timer("find path");
     find_path_timer.Start();
-
+    // 找出局部规划路径中必有的四个点： 本体位置，目标位置，和全局路径的两个交点
     std::vector<int> navigation_viewpoint_indices;
     GetNavigationViewPointIndices(global_path, navigation_viewpoint_indices);
 
@@ -493,6 +520,7 @@ LocalCoveragePlanner::SolveLocalCoverageProblem(const exploration_path_ns::Explo
 
     std::vector<int> pre_selected_viewpoint_array_indices;
     std::vector<int> reused_viewpoint_indices;
+    // 找下可以重新使用的视点
     for (auto &viewpoint_array_ind : last_selected_viewpoint_array_indices_) {
         if (viewpoint_manager_->ViewPointVisited(viewpoint_array_ind, true)
             || !viewpoint_manager_->IsViewPointCandidate(viewpoint_array_ind, true)) {
@@ -509,7 +537,7 @@ LocalCoveragePlanner::SolveLocalCoverageProblem(const exploration_path_ns::Explo
             }
         }
     }
-
+    // 把可以再利用的视点以及找出来的四个点放入预选择的视点集合
     for (const auto &ind : reused_viewpoint_indices) {
         int viewpoint_array_ind = viewpoint_manager_->GetViewPointArrayInd(ind);
         pre_selected_viewpoint_array_indices.push_back(viewpoint_array_ind);
